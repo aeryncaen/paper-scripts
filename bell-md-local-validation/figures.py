@@ -168,16 +168,7 @@ def plot_mi_pinsker_bound(mi_result: dict, output_path: Path):
     ax2.set_ylim([0, hall_bench * 1.3])
     ax2.grid(axis='y', alpha=0.25)
     
-    # Add consistency check annotation
-    consistent = mi_lower < hall_bench
-    check_text = '✓ Bound ≤ Optimal (Consistent)' if consistent else '✗ Exceeds optimal'
-    check_color = '#27AE60' if consistent else '#E74C3C'
-    
-    fig.text(0.5, 0.02, check_text, ha='center', fontsize=14, 
-             fontweight='bold', color=check_color,
-             bbox=dict(boxstyle='round', facecolor='white', edgecolor=check_color, linewidth=2))
-    
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -223,15 +214,6 @@ def plot_witness_product(df: pd.DataFrame, output_path: Path):
     ax2.legend(fontsize=11)
     ax2.grid(axis='y', alpha=0.25)
     
-    # Overall pass/fail indicator
-    all_pass = df['pass'].all() and df['entropy_pass'].all()
-    status_text = '✓ ALL TESTS PASS' if all_pass else '✗ SOME TESTS FAILED'
-    status_color = '#27AE60' if all_pass else '#E74C3C'
-    
-    fig.text(0.5, 0.02, status_text, ha='center', fontsize=14, 
-             fontweight='bold', color=status_color,
-             bbox=dict(boxstyle='round', facecolor='white', edgecolor=status_color, linewidth=2))
-    
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
