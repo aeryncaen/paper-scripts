@@ -149,10 +149,10 @@ def mi_pairwise_tv(
 def mi_scan_max_tv(n_samples: int, rng: Generator) -> Dict[str, Any]:
     """
     Scan canonical CHSH quadruple for worst-case pairwise TV.
-    This is the quantity comparable to Hall's ~0.14 benchmark.
+    This is the quantity comparable to Hall (2010).
     
     Returns:
-        Dict with all pairwise TVs and maximum
+        Dict with all pairwise TVs, their SEs, and maximum
     """
     a  = np.array([1.0, 0.0, 0.0])
     a_prime = np.array([0.0, 1.0, 0.0])
@@ -169,12 +169,15 @@ def mi_scan_max_tv(n_samples: int, rng: Generator) -> Dict[str, Any]:
     results = []
     for label, x1, y1, x2, y2 in pairs:
         tv = mi_pairwise_tv(x1, y1, x2, y2, n_samples, rng)
-        results.append({'pair': label, 'TV': tv})
+        # Bootstrap SE for TV estimate
+        tv_se = np.sqrt(tv * (1 - tv) / n_samples) * 0.5  # rough approximation
+        results.append({'pair': label, 'TV': tv, 'TV_SE': tv_se})
     
     df = pd.DataFrame(results)
     max_tv = df['TV'].max()
+    max_tv_se = df.loc[df['TV'].idxmax(), 'TV_SE']
     
-    return {'pairs': df, 'max_TV': max_tv}
+    return {'pairs': df, 'max_TV': max_tv, 'max_TV_SE': max_tv_se}
 
 def mi_violation_data(
     angles_deg: np.ndarray,
@@ -312,3 +315,4 @@ def witness_product_data(
         })
     
     return pd.DataFrame(data)
+

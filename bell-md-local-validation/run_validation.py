@@ -10,7 +10,7 @@ from analysis import (
     correlation_vs_angle_data, chsh_canonical_data,
     mi_violation_data, mi_scan_max_tv, witness_product_data
 )
-from figures import plot_correlation_curve, plot_mi_comparison, plot_witness_product
+from figures import plot_correlation_curve, plot_mi_comparison, plot_mi_pairwise_for_paper, plot_witness_product
 
 def print_header(title: str):
     print("\n" + "=" * 80)
@@ -46,8 +46,20 @@ def main():
     # 2. CHSH
     print_section("2. CHSH Canonical Geometry")
     chsh_result = chsh_canonical_data(n_samples=50000, rng=rng)
-    chsh_df = pd.DataFrame([chsh_result])
-    print(chsh_df.to_string(index=False, float_format='%.4f'))
+    
+    # Create detailed CHSH table with errors
+    chsh_details = pd.DataFrame([
+        {'Correlator': 'E(a,b)', 'Value': chsh_result['E_ab'], 'SE': chsh_result.get('se_ab', 0)},
+        {'Correlator': 'E(a,b\')', 'Value': chsh_result['E_ab_prime'], 'SE': chsh_result.get('se_abp', 0)},
+        {'Correlator': 'E(a\',b)', 'Value': chsh_result['E_a_prime_b'], 'SE': chsh_result.get('se_apb', 0)},
+        {'Correlator': 'E(a\',b\')', 'Value': chsh_result['E_a_prime_b_prime'], 'SE': chsh_result.get('se_apbp', 0)},
+    ])
+    print(chsh_details.to_string(index=False, float_format='%.4f'))
+    
+    print(f"\nCHSH S = {chsh_result['chsh_S']:.4f} ± {chsh_result['chsh_se']:.4f}")
+    print(f"95% CI: [{chsh_result['chsh_ci_lower']:.4f}, {chsh_result['chsh_ci_upper']:.4f}]")
+    print(f"Quantum prediction: {chsh_result['quantum_prediction']:.4f}")
+    print(f"Classical bound: {chsh_result['classical_bound']:.4f}")
     
     # 3. MI violation
     print_section("3. Measurement Independence Violation (vs Uniform)")
@@ -65,13 +77,26 @@ def main():
     # 3b. MI pairwise (Hall metric)
     print_section("3b. MI Budget: Pairwise TV (Hall 2010 Metric)")
     mi_pair_result = mi_scan_max_tv(n_samples=120000, rng=rng)
-    print(mi_pair_result['pairs'].to_string(index=False, float_format='%.4f'))
-    print(f"\nMaximum pairwise TV: {mi_pair_result['max_TV']:.4f}")
+    
+    # Print with error bars
+    pairs_with_ci = mi_pair_result['pairs'].copy()
+    pairs_with_ci['CI_lower'] = pairs_with_ci['TV'] - 1.96 * pairs_with_ci['TV_SE']
+    pairs_with_ci['CI_upper'] = pairs_with_ci['TV'] + 1.96 * pairs_with_ci['TV_SE']
+    print(pairs_with_ci[['pair', 'TV', 'TV_SE', 'CI_lower', 'CI_upper']].to_string(index=False, float_format='%.4f'))
+    
+    print(f"\nMaximum pairwise TV: {mi_pair_result['max_TV']:.4f} ± {mi_pair_result['max_TV_SE']:.4f}")
     print(f"Hall (2010) benchmark: 0.1400 (14%)")
-    print(f"Match: {'✓ YES' if 0.12 <= mi_pair_result['max_TV'] <= 0.16 else '✗ NO'}")
+    match = 0.12 <= mi_pair_result['max_TV'] <= 0.16
+    print(f"Match: {'✓ YES' if match else '✗ NO'}")
     
     plot_mi_comparison(mi_df, output_dir / "mi_violation.png")
     print(f"✓ Figure saved: {output_dir / 'mi_violation.png'}")
+    
+    # Generate paper-specific MI figure (simpler, just pairwise TV with errors)
+    plot_mi_pairwise_for_paper(mi_pair_result['pairs'], mi_pair_result['max_TV'], 
+                               mi_pair_result['max_TV_SE'], 
+                               output_dir / "mi_pairwise_paper.png")
+    print(f"✓ Paper figure saved: {output_dir / 'mi_pairwise_paper.png'}")
     
     # 4. Witness-product bound
     print_section("4. Witness-Product Bound (Theorem 2) + Min-Entropy Corollary")

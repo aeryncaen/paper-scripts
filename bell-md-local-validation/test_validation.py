@@ -38,11 +38,13 @@ class TestCHSH:
         result = chsh_canonical_data(n_samples=20000, rng=rng)
         assert result['chsh_S'] > 2.0, "CHSH must exceed classical bound of 2"
     
+    @pytest.mark.slow
     def test_chsh_matches_quantum(self, rng):
         result = chsh_canonical_data(n_samples=50000, rng=rng)
         quantum = 2 * np.sqrt(2)
         assert abs(result['chsh_S'] - quantum) < 0.05, f"CHSH should be ~{quantum:.4f}"
     
+    @pytest.mark.slow
     def test_chsh_within_ci(self, rng):
         result = chsh_canonical_data(n_samples=50000, rng=rng)
         quantum = 2 * np.sqrt(2)
@@ -56,6 +58,7 @@ class TestMIViolation:
         df = mi_violation_data(np.array([45]), n_samples=20000, rng=rng)
         assert df.iloc[0]['TV_distance'] > 0.05, "MI violation should be substantial"
     
+    @pytest.mark.slow
     def test_mi_pairwise_matches_hall(self, rng):
         from analysis import mi_scan_max_tv
         result = mi_scan_max_tv(n_samples=80000, rng=rng)
@@ -106,4 +109,3 @@ class TestWitnessProduct:
         assert all(df['entropy_pass']), "Min-entropy sum should exceed log₂(c)"
         assert all(df['min_H_sum'] >= df['bound_bits'] - 0.1), \
             "H₁ + H₂ >= log₂(c) within numerical tolerance"
-

@@ -140,4 +140,3 @@ def sample_uniform_sphere(n: int, rng: Generator) -> np.ndarray:
     """Sample uniformly from S²."""
     U = rng.normal(size=(n, 3))
     return U / np.linalg.norm(U, axis=1, keepdims=True)
-
