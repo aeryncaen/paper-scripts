@@ -59,7 +59,7 @@ def main():
     ])
     print(chsh_details.to_string(index=False, float_format='%.4f'))
     
-    print(f"\nCHSH S = {chsh_result['chsh_S']:.4f} ± {chsh_result['chsh_se']:.4f}")
+    print(f"\nCHSH SE(S) = {chsh_result['chsh_S']:.4f} ± {chsh_result['chsh_se']:.4f}")
     print(f"95% CI: [{chsh_result['chsh_ci_lower']:.4f}, {chsh_result['chsh_ci_upper']:.4f}]")
     print(f"Quantum prediction: {chsh_result['quantum_prediction']:.4f}")
     print(f"Classical bound: {chsh_result['classical_bound']:.4f}")
