@@ -2,7 +2,7 @@
 """Core MD-Local deterministic Bell model implementation."""
 
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional
 from numpy.random import Generator
 
 def unit(v: np.ndarray) -> np.ndarray:
@@ -29,11 +29,12 @@ def sector_flags(a: np.ndarray, b: np.ndarray, lam_batch: np.ndarray) -> np.ndar
     return np.where(da >= 0, 1, -1) == np.where(db >= 0, 1, -1)
 
 def sample_lambda(
-    a: np.ndarray, 
-    b: np.ndarray, 
-    n: int, 
+    a: np.ndarray,
+    b: np.ndarray,
+    n: int,
     rng: Generator,
-    batch_size: int = 4096
+    batch_size: int = 4096,
+    stats: Optional[dict] = None,
 ) -> np.ndarray:
     """
     Sample n vectors from ρ(λ|a,b) using acceptance-rejection.
@@ -63,6 +64,8 @@ def sample_lambda(
     
     out = np.empty((n, 3), dtype=float)
     k = 0
+    total_proposed = 0
+    total_accepted = 0
     
     # Handle degenerate cases
     if q_plus < 1e-15:  # Only opposite-sign sector exists
@@ -73,8 +76,15 @@ def sample_lambda(
             m = min(n - k, len(accepted))
             out[k:k+m] = accepted[:m]
             k += m
+            total_proposed += len(U)
+            total_accepted += len(accepted)
+        if stats is not None:
+            stats.setdefault('proposed', 0)
+            stats.setdefault('accepted', 0)
+            stats['proposed'] += total_proposed
+            stats['accepted'] += total_accepted
         return out
-    
+
     if q_minus < 1e-15:  # Only same-sign sector exists
         while k < n:
             U = rng.normal(size=(batch_size, 3))
@@ -83,6 +93,13 @@ def sample_lambda(
             m = min(n - k, len(accepted))
             out[k:k+m] = accepted[:m]
             k += m
+            total_proposed += len(U)
+            total_accepted += len(accepted)
+        if stats is not None:
+            stats.setdefault('proposed', 0)
+            stats.setdefault('accepted', 0)
+            stats['proposed'] += total_proposed
+            stats['accepted'] += total_accepted
         return out
     
     # General case: acceptance-rejection with sector-dependent rates
@@ -102,7 +119,15 @@ def sample_lambda(
         m = min(n - k, len(accepted))
         out[k:k+m] = accepted[:m]
         k += m
-    
+        total_proposed += len(U)
+        total_accepted += len(accepted)
+
+    if stats is not None:
+        stats.setdefault('proposed', 0)
+        stats.setdefault('accepted', 0)
+        stats['proposed'] += total_proposed
+        stats['accepted'] += total_accepted
+
     return out
 
 def compute_outcomes(

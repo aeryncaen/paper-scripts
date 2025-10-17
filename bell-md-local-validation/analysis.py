@@ -31,11 +31,13 @@ def correlation_vs_angle_data(
         a = np.array([1.0, 0.0, 0.0])
         b = np.array([np.cos(angle_rad), np.sin(angle_rad), 0.0])
         
-        lam = sample_lambda(a, b, n_samples, rng)
+        stats = {'proposed': 0, 'accepted': 0}
+        lam = sample_lambda(a, b, n_samples, rng, stats=stats)
         A, B = compute_outcomes(a, b, lam)
         corr = float(np.mean(A * B))
         se = float(np.sqrt(max(1e-16, 1.0 - corr**2) / n_samples))
-        
+        acceptance_rate = float(stats['accepted'] / max(1, stats['proposed'])) if stats['proposed'] else 1.0
+
         data.append({
             'angle_deg': angle_deg,
             'correlation': corr,
@@ -43,10 +45,16 @@ def correlation_vs_angle_data(
             'std_error': se,
             'ci_lower': corr - 1.96 * se,
             'ci_upper': corr + 1.96 * se,
-            'abs_error': abs(corr + np.cos(angle_rad))
+            'abs_error': abs(corr + np.cos(angle_rad)),
+            'acceptance_rate': acceptance_rate
         })
-    
+
     return pd.DataFrame(data)
+
+def _spawn_rngs(base_rng: Generator, count: int) -> List[Generator]:
+    """Generate independent child RNGs from a base generator."""
+    seeds = base_rng.integers(0, 2**63, size=count, dtype=np.uint64)
+    return [np.random.default_rng(int(seed)) for seed in seeds]
 
 def chsh_canonical_data(n_samples: int, rng: Generator) -> Dict[str, Any]:
     """
@@ -60,31 +68,94 @@ def chsh_canonical_data(n_samples: int, rng: Generator) -> Dict[str, Any]:
     b  = np.array([1.0, 1.0, 0.0]) / np.sqrt(2)
     b_prime = np.array([1.0, -1.0, 0.0]) / np.sqrt(2)
     
-    def compute_corr(x, y):
-        lam = sample_lambda(x, y, n_samples, rng)
+    pair_labels = [
+        ('ab', a, b),
+        ('ab_prime', a, b_prime),
+        ('a_prime_b', a_prime, b),
+        ('a_prime_b_prime', a_prime, b_prime),
+    ]
+
+    child_rngs = _spawn_rngs(rng, len(pair_labels))
+    pair_stats = {}
+
+    for (label, x, y), pair_rng in zip(pair_labels, child_rngs):
+        stats = {'proposed': 0, 'accepted': 0}
+        lam = sample_lambda(x, y, n_samples, pair_rng, stats=stats)
         A, B = compute_outcomes(x, y, lam)
-        return float(np.mean(A * B))
-    
-    E_ab = compute_corr(a, b)
-    E_ab_prime = compute_corr(a, b_prime)
-    E_a_prime_b = compute_corr(a_prime, b)
-    E_a_prime_b_prime = compute_corr(a_prime, b_prime)
-    
-    S = abs(E_ab + E_ab_prime + E_a_prime_b - E_a_prime_b_prime)
-    se_each = np.sqrt((1 - E_ab**2) / n_samples)
-    se_S = np.sqrt(4 * se_each**2)
-    
+        corr = float(np.mean(A * B))
+        se_corr = float(np.sqrt(max(1e-16, 1.0 - corr**2) / n_samples))
+        p_A_pos = float(np.mean(A > 0))
+        p_B_pos = float(np.mean(B > 0))
+        pair_stats[label] = {
+            'correlation': corr,
+            'se': se_corr,
+            'p_A_plus': p_A_pos,
+            'p_B_plus': p_B_pos,
+            'acceptance_rate': float(stats['accepted'] / max(1, stats['proposed'])) if stats['proposed'] else 1.0,
+        }
+
+    E_ab = pair_stats['ab']['correlation']
+    E_ab_prime = pair_stats['ab_prime']['correlation']
+    E_a_prime_b = pair_stats['a_prime_b']['correlation']
+    E_a_prime_b_prime = pair_stats['a_prime_b_prime']['correlation']
+
+    raw_S = E_ab + E_ab_prime + E_a_prime_b - E_a_prime_b_prime
+    S = abs(raw_S)
+    se_S = float(np.sqrt(
+        pair_stats['ab']['se']**2 +
+        pair_stats['ab_prime']['se']**2 +
+        pair_stats['a_prime_b']['se']**2 +
+        pair_stats['a_prime_b_prime']['se']**2
+    ))
+
+    # No-signaling diagnostics
+    def _avg_bias(pairs: List[str], key: str) -> float:
+        vals = [pair_stats[p][key] for p in pairs]
+        return abs(np.mean(vals) - 0.5)
+
+    A_biases = [
+        _avg_bias(['ab', 'ab_prime'], 'p_A_plus'),
+        _avg_bias(['a_prime_b', 'a_prime_b_prime'], 'p_A_plus')
+    ]
+    B_biases = [
+        _avg_bias(['ab', 'a_prime_b'], 'p_B_plus'),
+        _avg_bias(['ab_prime', 'a_prime_b_prime'], 'p_B_plus')
+    ]
+
+    A_signals = [
+        abs(pair_stats['ab']['p_A_plus'] - pair_stats['ab_prime']['p_A_plus']),
+        abs(pair_stats['a_prime_b']['p_A_plus'] - pair_stats['a_prime_b_prime']['p_A_plus'])
+    ]
+    B_signals = [
+        abs(pair_stats['ab']['p_B_plus'] - pair_stats['a_prime_b']['p_B_plus']),
+        abs(pair_stats['ab_prime']['p_B_plus'] - pair_stats['a_prime_b_prime']['p_B_plus'])
+    ]
+
+    no_signaling = {
+        'max_A_bias': max(A_biases),
+        'max_B_bias': max(B_biases),
+        'max_A_signal': max(A_signals),
+        'max_B_signal': max(B_signals),
+    }
+
     return {
         'E_ab': E_ab,
         'E_ab_prime': E_ab_prime,
         'E_a_prime_b': E_a_prime_b,
         'E_a_prime_b_prime': E_a_prime_b_prime,
+        'se_ab': pair_stats['ab']['se'],
+        'se_ab_prime': pair_stats['ab_prime']['se'],
+        'se_a_prime_b': pair_stats['a_prime_b']['se'],
+        'se_a_prime_b_prime': pair_stats['a_prime_b_prime']['se'],
+        'chsh_raw_S': raw_S,
         'chsh_S': S,
         'chsh_se': se_S,
         'chsh_ci_lower': S - 1.96 * se_S,
         'chsh_ci_upper': S + 1.96 * se_S,
         'quantum_prediction': 2 * np.sqrt(2),
-        'classical_bound': 2.0
+        'classical_bound': 2.0,
+        'pair_stats': pair_stats,
+        'no_signaling': no_signaling,
     }
 
 def mi_pairwise_tv(

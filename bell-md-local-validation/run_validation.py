@@ -2,6 +2,7 @@
 # run_validation.py
 """Main validation runner with clean output."""
 
+import time
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -24,6 +25,7 @@ def print_section(title: str):
 
 def main():
     # Setup
+    start_time = time.perf_counter()
     rng = default_rng(42069)
     output_dir = Path("results")
     output_dir.mkdir(exist_ok=True)
@@ -40,6 +42,7 @@ def main():
         rng=rng
     )
     print(corr_df.to_string(index=False, float_format='%.4f'))
+    print("\nAcceptance diagnostics: mean acceptance = {:.4f}".format(corr_df['acceptance_rate'].mean()))
     plot_correlation_curve(corr_df, output_dir / "correlation_curve.png")
     print(f"✓ Figure saved: {output_dir / 'correlation_curve.png'}")
     
@@ -49,10 +52,10 @@ def main():
     
     # Create detailed CHSH table with errors
     chsh_details = pd.DataFrame([
-        {'Correlator': 'E(a,b)', 'Value': chsh_result['E_ab'], 'SE': chsh_result.get('se_ab', 0)},
-        {'Correlator': 'E(a,b\')', 'Value': chsh_result['E_ab_prime'], 'SE': chsh_result.get('se_abp', 0)},
-        {'Correlator': 'E(a\',b)', 'Value': chsh_result['E_a_prime_b'], 'SE': chsh_result.get('se_apb', 0)},
-        {'Correlator': 'E(a\',b\')', 'Value': chsh_result['E_a_prime_b_prime'], 'SE': chsh_result.get('se_apbp', 0)},
+        {'Correlator': 'E(a,b)', 'Value': chsh_result['E_ab'], 'SE(E)': chsh_result['se_ab']},
+        {'Correlator': "E(a,b')", 'Value': chsh_result['E_ab_prime'], 'SE(E)': chsh_result['se_ab_prime']},
+        {'Correlator': "E(a',b)", 'Value': chsh_result['E_a_prime_b'], 'SE(E)': chsh_result['se_a_prime_b']},
+        {'Correlator': "E(a',b')", 'Value': chsh_result['E_a_prime_b_prime'], 'SE(E)': chsh_result['se_a_prime_b_prime']},
     ])
     print(chsh_details.to_string(index=False, float_format='%.4f'))
     
@@ -93,11 +96,22 @@ def main():
     print(f"✓ Figure saved: {output_dir / 'mi_violation.png'}")
     
     # Generate paper-specific MI figure (simpler, just pairwise TV with errors)
-    plot_mi_pairwise_for_paper(mi_pair_result['pairs'], mi_pair_result['max_TV'], 
-                               mi_pair_result['max_TV_SE'], 
+    plot_mi_pairwise_for_paper(mi_pair_result['pairs'], mi_pair_result['max_TV'],
+                               mi_pair_result['max_TV_SE'],
                                output_dir / "mi_pairwise_paper.png")
     print(f"✓ Paper figure saved: {output_dir / 'mi_pairwise_paper.png'}")
     
+    # 3c. No-signaling diagnostics
+    print_section("3c. No-Signaling Diagnostics")
+    ns = chsh_result['no_signaling']
+    ns_table = pd.DataFrame([
+        {"Metric": "max_a |Pr(A=+1|a,·) - 0.5|", "Value": ns['max_A_bias']},
+        {"Metric": "max_{a,b,b'} |Pr(A|a,b) - Pr(A|a,b')|", "Value": ns['max_A_signal']},
+        {"Metric": "max_b |Pr(B=+1|·,b) - 0.5|", "Value": ns['max_B_bias']},
+        {"Metric": "max_{b,a,a'} |Pr(B|a,b) - Pr(B|a',b)|", "Value": ns['max_B_signal']},
+    ])
+    print(ns_table.to_string(index=False, float_format='%.4f'))
+
     # 4. Witness-product bound
     print_section("4. Witness-Product Bound (Theorem 2) + Min-Entropy Corollary")
     wp_df = witness_product_data(
@@ -158,6 +172,13 @@ def main():
     print("\n" + "─" * 80)
     print(f"OVERALL: {'✓✓✓ ALL TESTS PASS ✓✓✓' if all_tests_pass else '✗ SOME TESTS FAILED'}")
     print("=" * 80)
+
+    elapsed = time.perf_counter() - start_time
+    print(f"NumPy version: {np.__version__}")
+
+    import matplotlib
+    print(f"Matplotlib version: {matplotlib.__version__}")
+    print(f"Elapsed time: {elapsed:.2f} s")
 
 if __name__ == '__main__':
     main()
